@@ -152,6 +152,12 @@
 	pinctrl-0 = <&pinctrl_audmux_1>;
 };
 
+&uart1 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_uart1_2>;
+};
+
 &uart2 {
 	status = "okay";
 	pinctrl-names = "default";
