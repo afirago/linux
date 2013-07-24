@@ -202,3 +202,34 @@ void __init omap_4430sdp_display_init_of(void)
 
 	omap_display_init(&sdp4430_dss_data);
 }
+
+/* OMAP3 Beagle Display DVI */
+
+/* Using generic display panel */
+static struct tfp410_platform_data omap3_dvi_panel = {
+	.i2c_bus_num		= 2,
+	.power_down_gpio	= -1,
+};
+
+static struct omap_dss_device omap3_beagle_dvi_device = {
+	.type			= OMAP_DISPLAY_TYPE_DPI,
+	.name			= "dvi",
+	.driver_name		= "tfp410",
+	.data			= &omap3_dvi_panel,
+	.phy.dpi.data_lines	= 24,
+};
+
+static struct omap_dss_device *omap3_beagle_dss_devices[] = {
+	&omap3_beagle_dvi_device,
+};
+
+static struct omap_dss_board_info omap3_beagle_dss_data = {
+	.num_devices	= ARRAY_SIZE(omap3_beagle_dss_devices),
+	.devices	= omap3_beagle_dss_devices,
+	.default_device	= &omap3_beagle_dvi_device,
+};
+
+void __init omap3_beagle_display_init_of(void)
+{
+	omap_display_init(&omap3_beagle_dss_data);
+}

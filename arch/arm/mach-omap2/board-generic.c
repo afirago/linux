@@ -70,6 +70,9 @@ static void __init omap_generic_init(void)
 		omap_4430sdp_display_init_of();
 	else if (of_machine_is_compatible("ti,omap5-uevm"))
 		legacy_init_ehci_clk("auxclk1_ck");
+	else if (of_machine_is_compatible("ti,omap3-beagle-xm")) {
+		omap3_beagle_display_init_of();
+	}
 }
 
 #ifdef CONFIG_SOC_OMAP2420
