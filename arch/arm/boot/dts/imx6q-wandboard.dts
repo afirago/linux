@@ -24,3 +24,16 @@
 &sata {
 	status = "okay";
 };
+
+&i2c1 {
+	clock-frequency = <100000>;
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_i2c1_1>;
+	status = "okay";
+};
+
+&hdmi {
+	crtcs = <&ipu1 0 &ipu1 1 &ipu2 0 &ipu2 1>;
+	ddc = <&i2c1>;
+	status = "okay";
+};
