@@ -35,6 +35,9 @@
 #include <linux/clk.h>
 #include <linux/regulator/consumer.h>
 #include <linux/of.h>
+#include <linux/of_gpio.h>
+#include <linux/gpio.h>
+#include <linux/delay.h>
 
 struct nop_usb_xceiv {
 	struct usb_phy phy;
@@ -42,6 +45,8 @@ struct nop_usb_xceiv {
 	struct clk *clk;
 	struct regulator *vcc;
 	struct regulator *reset;
+	int gpio_reset;
+	bool reset_active_low;
 };
 
 static struct platform_device *pd;
@@ -70,6 +75,23 @@ static int nop_set_suspend(struct usb_phy *x, int suspend)
 	return 0;
 }
 
+static void nop_reset_set(struct nop_usb_xceiv *nop, int asserted)
+{
+	int value;
+
+	if (!gpio_is_valid(nop->gpio_reset))
+		return;
+
+	value = asserted;
+	if (nop->reset_active_low)
+		value = !value;
+
+	gpio_set_value_cansleep(nop->gpio_reset, value);
+
+	if (!asserted)
+		usleep_range(10000, 20000);
+}
+
 static int nop_init(struct usb_phy *phy)
 {
 	struct nop_usb_xceiv *nop = dev_get_drvdata(phy->dev);
@@ -82,11 +104,8 @@ static int nop_init(struct usb_phy *phy)
 	if (!IS_ERR(nop->clk))
 		clk_enable(nop->clk);
 
-	if (!IS_ERR(nop->reset)) {
-		/* De-assert RESET */
-		if (regulator_enable(nop->reset))
-			dev_err(phy->dev, "Failed to de-assert reset\n");
-	}
+	/* De-assert RESET */
+	nop_reset_set(nop, 0);
 
 	return 0;
 }
@@ -95,11 +114,8 @@ static void nop_shutdown(struct usb_phy *phy)
 {
 	struct nop_usb_xceiv *nop = dev_get_drvdata(phy->dev);
 
-	if (!IS_ERR(nop->reset)) {
-		/* Assert RESET */
-		if (regulator_disable(nop->reset))
-			dev_err(phy->dev, "Failed to assert reset\n");
-	}
+	/* Assert RESET */
+	nop_reset_set(nop, 1);
 
 	if (!IS_ERR(nop->clk))
 		clk_disable(nop->clk);
@@ -148,7 +164,6 @@ static int nop_usb_xceiv_probe(struct platform_device *pdev)
 	int err;
 	u32 clk_rate = 0;
 	bool needs_vcc = false;
-	bool needs_reset = false;
 
 	nop = devm_kzalloc(&pdev->dev, sizeof(*nop), GFP_KERNEL);
 	if (!nop)
@@ -159,20 +174,28 @@ static int nop_usb_xceiv_probe(struct platform_device *pdev)
 	if (!nop->phy.otg)
 		return -ENOMEM;
 
+	nop->reset_active_low = true;	/* default behaviour */
+
 	if (dev->of_node) {
 		struct device_node *node = dev->of_node;
+		enum of_gpio_flags flags;
 
 		if (of_property_read_u32(node, "clock-frequency", &clk_rate))
 			clk_rate = 0;
 
 		needs_vcc = of_property_read_bool(node, "vcc-supply");
-		needs_reset = of_property_read_bool(node, "reset-supply");
+		nop->gpio_reset = of_get_named_gpio_flags(node, "reset-gpios",
+								0, &flags);
+		if (nop->gpio_reset == -EPROBE_DEFER)
+			return -EPROBE_DEFER;
+
+		nop->reset_active_low = flags & OF_GPIO_ACTIVE_LOW;
 
 	} else if (pdata) {
 		type = pdata->type;
 		clk_rate = pdata->clk_rate;
 		needs_vcc = pdata->needs_vcc;
-		needs_reset = pdata->needs_reset;
+		nop->gpio_reset = pdata->gpio_reset;
 	}
 
 	nop->clk = devm_clk_get(&pdev->dev, "main_clk");
@@ -205,12 +228,22 @@ static int nop_usb_xceiv_probe(struct platform_device *pdev)
 			return -EPROBE_DEFER;
 	}
 
-	nop->reset = devm_regulator_get(&pdev->dev, "reset");
-	if (IS_ERR(nop->reset)) {
-		dev_dbg(&pdev->dev, "Error getting reset regulator: %ld\n",
-					PTR_ERR(nop->reset));
-		if (needs_reset)
-			return -EPROBE_DEFER;
+	if (gpio_is_valid(nop->gpio_reset)) {
+		unsigned long gpio_flags;
+
+		/* Assert RESET */
+		if (nop->reset_active_low)
+			gpio_flags = GPIOF_OUT_INIT_HIGH;
+		else
+			gpio_flags = GPIOF_OUT_INIT_LOW;
+
+		err = devm_gpio_request_one(dev, nop->gpio_reset,
+						gpio_flags, dev_name(dev));
+		if (err) {
+			dev_err(dev, "Error requesting RESET GPIO %d\n",
+					nop->gpio_reset);
+			return err;
+		}
 	}
 
 	nop->dev		= &pdev->dev;
