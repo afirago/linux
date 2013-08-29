@@ -59,6 +59,13 @@
 		wifi-host-wake = <&gpio1 29 0>;
 		wifi-wake = <&gpio1 30 0>;
 	};
+
+	sound-spdif {
+		compatible = "fsl,imx-audio-spdif";
+		model = "imx-spdif";
+		spdif-controller = <&spdif>;
+		spdif-out;
+	};
 };
 
 &audmux {
@@ -140,6 +147,12 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&pinctrl_enet_1>;
 	phy-mode = "rgmii";
+	status = "okay";
+};
+
+&spdif {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinctrl_spdif_3>;
 	status = "okay";
 };
 
